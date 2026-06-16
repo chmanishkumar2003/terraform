@@ -1,100 +1,236 @@
-Go to AWS Console → EC2
-Click Launch Instance
-Select:
+go to GitHub and copy the jenkinsi installation code and use to
  
-AMI: Ubuntu
-Instance type: t2.micro (Free Tier)
+https://gitHub.com/akshu20791/Deployemnt-script
  
+Go to jenkins
+create a new job
+give item name
+select : pipeline
+Fork : https://github.com/akshu20791/addressbook-cicd-project
+
  
-Create/select key pair
-Allow:
+pipeline{
  
-SSH (port 22)
+    agent any
  
+    stages{
  
-Launch the instance
+        stage("clone from github"){
  
-Connect to EC2
+            steps{
  
->>sudo su
+               git 'https://github.com/akshu20791/addressbook-cicd-project/'
  
->>wget -O - https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+               echo 'clone done'
  
->>echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+            }
  
->>sudo apt update && sudo apt install terraform -y
+        }
  
->>terraform --version
+        stage("compile the project"){
  
->>mkdir project
->>cd project
+            steps{
  
-Go to AWS Console
-Search → IAM
-Click → Users
-Create user:
+                sh 'mvn compile'
  
-Name: anything (e.g., terraform-user)
-Permissions: AdministratorAccess
+            }
  
+        }
  
-Create user
-Go to:
+        stage("run the test cases"){
  
-Security Credentials
-Click Create Access Key
+         steps{
  
+            sh 'mvn test'
  
-✅ Save:
+         }
  
-Access Key
-Secret Key
+        }
  
->>vi connection.t
+        stage("package the project"){
  
-**
-provider "aws" {
-  region     = "us-east-1"   # Change if needed
-  access_key = "YOUR_ACCESS_KEY"
-  secret_key = "YOUR_SECRET_KEY"
+            steps{
+ 
+                sh 'mvn package'
+ 
+            }
+ 
+        }
+ 
+    }
+ 
 }
  
->>vi ec2.tf
  
-**
-data "aws_ami" "ubuntu" {
-  most_recent = true
+Now we need to deploy the app
+for that we need to use TOMCAT 
+which is webserver required to deploy the java based app
+https://tomcat.apache.org/download-90.cgi
+Right click on zip and copy address
+
  
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
-  }
+wget https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.118/bin/apache-tomcat-9.0.118.zip
+apt install unzip -y
+unzip apache-tomcat-9.0.118.zip
+So jenkins and tomcat works on port 8080...we cannot run two differnt software/app in same port 
+cd apache-tomcat-9.0.118
+ls
+
  
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
+cd conf
+ls
+Here you will see server.xml file
+vi server.xml 
+Replace 8080 with 9090
  
-  owners = ["099720109477"] # Canonical
+esc :wq
+ 
+cd ..
+cd bin
+# you need to give read write and execiute permission to all the files ending with .sh
+chmod +x *.sh
+./startup.sh
+your tomcat will not run on port 9090
+publicip:9090
+
+ 
+ 
+cd ..
+To deploy java app ...what ever package (jar or war) is created we need to copy it to webapps directory inside the tomcat folder
+
+Lets first check where the package is created
+lets go to jenkins...lets build the job
+
+ 
+ 
+click on your latest build..if success
+clcik on console output
+in logs you will find this..this is basically the war file createed by jenkins 
+copy the location
+put it in notepad
+/var/lib/jenkins/workspace/address/target/addressbook.war
+ 
+now go back to your machine and check the location of webapps directory
+cd webapps
+pwd   # to check the working directory...
+ 
+ 
+
+copy the location
+/home/ubuntu/apache-tomcat-9.0.118/webapps
+Go to jenkins --- go to your pipeline -- configure 
+
+ 
+
+
+/home/ubuntu/apache-tomcat-9.0.118/webapps
+lets now complete the pipeline
+We will add up the deploying stage where in the steps we will mention:
+sudo cp sourcelocation of war file destination 
+
+
+pipeline{
+ 
+    agent any
+ 
+    stages{
+ 
+        stage("clone from github"){
+ 
+            steps{
+ 
+               git 'https://github.com/akshu20791/addressbook-cicd-project/'
+ 
+               echo 'clone done'
+ 
+            }
+ 
+        }
+ 
+        stage("compile the project"){
+ 
+            steps{
+ 
+                sh 'mvn compile'
+ 
+            }
+ 
+        }
+ 
+        stage("run the test cases"){
+ 
+         steps{
+ 
+            sh 'mvn test'
+ 
+         }
+ 
+        }
+ 
+        stage("package the project"){
+ 
+            steps{
+ 
+                sh 'mvn package'
+ 
+            }
+ 
+        }
+ 
+        stage("deploying the project to tomcat"){
+ 
+            steps{
+  sh "sudo cp /var/lib/jenkins/workspace/myfirstprojectdeployment/target/addressbook.war /home/ubuntu/apache-tomcat-9.0.118/webapps"
+ 
+            }
+ 
+        }
+ 
+    }
+ 
 }
+
+You have to change the location of your source and destination 
+Build now 
+you will get the error !!!
+This error says that your jenkins user does not have sudo permission so copy will not work...we need to give admin permission to jenkins
+
+Click on error build 
+go to console outpout
+
+because jenkins does not have root permission
+
+We will now give the root permission to jenkins ...
+
+Go to machine ...there is a sudoers file...
+
+visudo
  
-resource "aws_instance" "example" {
-  ami           = data.aws_ami.ubuntu.id
-  instance_type = "t3.micro"
+under the root we need to write it
  
-  tags = {
-    Name = "HelloWorld"
-  }
-}
+
+jenkins ALL=(ALL:ALL) NOPASSWD: ALL
+(put this below root)
+
+ctrl x ->y -> enter to come out of the file
+For this permission to take place we need to restart jenkins
+
+service jenkins restart
+
+you need to relogin the jenkins from browser
+build the job again
+Go to your job -> build now
+
+Wait for it to be success
+if you get error you can put the logs in chatgpt and try to identify issuer
+build is success
+
+
+let see if app is running:
+
+http://publicipofmachine:9090/addressbook
+in my case: http://3.19.66.196:9090/addressbook/
  
->>terraform init
  
->>terraform apply --auto-approve
  
-Go to AWS Console → EC2
-Check instance list
- 
-✅ You should see:
-Terraform-Instance running
- 
->>terraform destroy --auto-approve
+GitHub - akshu20791/addressbook-cicd-project
