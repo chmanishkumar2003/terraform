@@ -1,0 +1,109 @@
+#Install terraform in ec2
+sudo apt update
+sudo apt install wget unzip -y
+
+wget https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip
+
+unzip terraform_1.7.5_linux_amd64.zip
+
+sudo mv terraform /usr/local/bin/
+
+terraform -version
+
+#Create Project Structure
+mkdir project
+cd project
+
+sudo apt update && sudo apt install awscli -y
+
+aws configure
+AKIAWG6QYRO3BXKRKR5F
+0PaSzLc35mgbQg1JzFMDQxmmMgbUnlhvzVTAMc3Q
+
+>> vi provider.tf
+
+provider "aws" {
+  region = var.aws_region
+}
+
+>> vi variables.tf
+
+variable "aws_region" {
+  default = "us-east-1"
+}
+
+variable "ami_id" {}
+
+variable "instance_type" {
+  default = "t2.micro"
+}
+variable "key_name" {}
+
+>> vi main.tf
+
+resource "aws_security_group" "devops_sg" {
+  name = "devops-sg-manish"
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "jenkins_server" {
+  ami                    = var.ami_id
+  instance_type          = var.instance_type
+  key_name               = var.key_name
+  vpc_security_group_ids = [aws_security_group.devops_sg.id]
+
+  tags = {
+    Name = "Jenkins-Server"
+  }
+}
+
+resource "aws_instance" "tomcat_server" {
+  ami                    = var.ami_id
+  instance_type          = var.instance_type
+  key_name               = var.key_name
+  vpc_security_group_ids = [aws_security_group.devops_sg.id]
+
+  tags = {
+    Name = "Tomcat-Server"
+  }
+}
+
+>> vi outputs.tf
+
+output "jenkins_public_ip" {
+  value = aws_instance.jenkins_server.public_ip
+}
+
+output "tomcat_public_ip" {
+  value = aws_instance.tomcat_server.public_ip
+}
+
+>> vi terraform.tfvars
+ami_id        = "your_ami_id_of_instance"
+instance_type = "t2.micro"
+key_name      = "your-keypair-name"
+
+terraform init
+terraform validate
+terraform plan
+terraform apply
