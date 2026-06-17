@@ -1,0 +1,127 @@
+sudo apt update
+sudo apt install ansible -y
+
+ansible --version
+
+mkdir /home/ubuntu/ansible-project
+cd /home/ubuntu/ansible-project
+
+mkdir -p roles/common/tasks
+mkdir -p roles/jenkins/tasks
+mkdir -p roles/tomcat/tasks
+
+>> vi inventory
+
+[jenkins]
+YOUR_JENKINS_IP
+
+[tomcat]
+YOUR_TOMCAT_IP
+
+[all:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=/home/ubuntu/devops-key.pem
+
+
+>> vi roles/common/tasks/main.yml
+
+---
+- name: Install Java
+  apt:
+    name: openjdk-11-jdk
+    state: present
+    update_cache: yes
+
+>> vi roles/jenkins/tasks/main.yml
+
+---
+- name: Install required packages
+  apt:
+    name:
+      - openjdk-17-jdk
+      - wget
+      - curl
+      - gnupg
+    state: present
+    update_cache: yes
+
+- name: Download Jenkins key
+  shell: |
+    curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key | gpg --dearmor -o /usr/share/keyrings/jenkins.gpg
+  args:
+    creates: /usr/share/keyrings/jenkins.gpg
+
+- name: Add Jenkins repository
+  copy:
+    dest: /etc/apt/sources.list.d/jenkins.list
+    content: |
+      deb [signed-by=/usr/share/keyrings/jenkins.gpg] https://pkg.jenkins.io/debian-stable binary/
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Install Jenkins
+  apt:
+    name: jenkins
+    state: present
+
+- name: Enable Jenkins
+  service:
+    name: jenkins
+    enabled: yes
+    state: started
+
+>> vi roles/tomcat/tasks/main.yml
+
+---
+- name: Create Tomcat User
+  user:
+    name: tomcat
+    shell: /bin/false
+    home: /opt/tomcat
+
+- name: Download Tomcat
+  get_url:
+    url: https://archive.apache.org/dist/tomcat/tomcat-9/v9.0.89/bin/apache-tomcat-9.0.89.tar.gz
+    dest: /tmp/tomcat.tar.gz
+
+- name: Create Tomcat Directory
+  file:
+    path: /opt/tomcat
+    state: directory
+
+- name: Extract Tomcat
+  unarchive:
+    src: /tmp/tomcat.tar.gz
+    dest: /opt/tomcat
+    remote_src: yes
+    extra_opts: [--strip-components=1]
+
+>> vi site.yml
+---
+- hosts: all
+  become: yes
+  roles:
+    - common
+
+- hosts: jenkins
+  become: yes
+  roles:
+    - jenkins
+
+- hosts: tomcat
+  become: yes
+  roles:
+    - tomcat
+
+ansible all -i inventory -m ping
+
+Now test SSH manually:
+
+ssh -i /home/ubuntu/devops-key.pem ubuntu@54.204.86.226
+exit
+
+ssh -i /home/ubuntu/devops-key.pem ubuntu@54.235.19.60
+exit
+
